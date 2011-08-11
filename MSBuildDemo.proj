@@ -1,0 +1,125 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" 
+         ToolsVersion="3.5" 
+         InitialTargets="BuscaProjetos" 
+         xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!--
+    Baixar MSBuildCommunity tasks de http://msbuildtasks.tigris.org/
+  -->
+  <Import Project="$(MSBuildExtensionsPath)\MSBuildCommunityTasks\MSBuild.Community.Tasks.Targets"/>
+
+  <PropertyGroup>
+    <SolutionName>MSBuildDemo.sln</SolutionName>
+    <CodeFolder>$(MSBuildProjectDirectory)</CodeFolder><!-- Variavel do MSBuild com diretorio do projeto -->
+    <TestFolder>$(MSBuildProjectDirectory)\tests\UnitTests</TestFolder>
+    <ResultsFolder>$(MSBuildProjectDirectory)\Results</ResultsFolder>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <CaminhoNUnit>C:\Program Files\NUnit 2.5.3\bin\net-2.0\</CaminhoNUnit>
+    <ComandoNUnit>$(CaminhoNUnit)nunit-console.exe</ComandoNUnit>
+    <ArquivoNUnit>ResultadosTestes.xml</ArquivoNUnit>
+    <CaminhoNCover>C:\Program Files\NCover</CaminhoNCover>
+    <ArquivoNCover>ResultadoNCover.xml</ArquivoNCover>
+    <ArquivoLogNCover>Coverage.log</ArquivoLogNCover>
+    <CaminhoNCoverExplorer>$(MSBuildProjectDirectory)\tools\NCoverExplorer</CaminhoNCoverExplorer>
+  </PropertyGroup>
+
+  <Target Name="BuscaProjetos">
+
+    <!-- Busca todos os projetos da solucao -->
+    <GetSolutionProjects Solution="$(CodeFolder)\$(SolutionName)">
+      <Output TaskParameter="Output" ItemName="ProjetosSolucao" />
+    </GetSolutionProjects>
+
+    <!-- Busca os projetos de Testes -->
+    <RegexMatch Input="@(ProjetosSolucao)" Expression=".*?[\.]?(Test[s]{0,1}|IntegrationTest)[\.]csproj$">
+      <Output TaskParameter="Output" ItemName="ProjetosTeste"/>
+    </RegexMatch>
+
+    <!-- Separa somente os projetos da solução sem os testes -->
+    <CreateItem Include="@(ProjetosSolucao)"
+                Exclude="@(ProjetosTeste)">
+      <Output TaskParameter="Include" ItemName="CodeProjects"/>
+    </CreateItem>
+    
+  </Target>
+  
+  <Target Name="Build">
+
+    <Message Text="#--------- Compilando Projetos ---------#" />
+
+    <!-- Compila os assemblies -->
+    <MSBuild Projects="@(CodeProjects)"
+             Targets="$(BuildTargets)"
+             Properties="Configuration=$(Configuration);Platform=$(Platform)">
+      <Output TaskParameter="TargetOutputs"
+              ItemName="CodeAssemblies"/>
+    </MSBuild>
+
+
+  </Target>
+
+  <Target Name="BuildTests" DependsOnTargets="Build">
+
+    <Message Text="#--------- Compilando Testes ---------#" />
+    
+    <MSBuild Projects="@(ProjetosTeste)"
+               Targets="$(BuildTargets)"
+               Properties="Configuration=$(Configuration);Platform=$(Platform)">
+      <Output TaskParameter="TargetOutputs"
+              ItemName="AssembliesTeste"/>
+    </MSBuild>
+  </Target>
+
+  <Target Name="Tests" DependsOnTargets="BuildTests">
+    <Message Text="#--------- Executando NUnit ---------#" />
+    
+    <NUnit Assemblies="@(AssembliesTeste)"
+             ToolPath="$(CaminhoNUnit)"
+             WorkingDirectory="%(AssembliesTeste.RootDir)%(AssembliesTeste.Directory)"
+             OutputXmlFile="@(AssembliesTeste->'%(FullPath).$(ArquivoNUnit)')"
+             ContinueOnError="true">
+      <Output TaskParameter="ExitCode" ItemName="NUnitExitCodes"/>
+    </NUnit>
+  </Target>
+
+  <UsingTask TaskName="NCoverExplorer.MSBuildTasks.NCover" AssemblyFile="$(CaminhoNCover)\Build Task Plugins\NCoverExplorer.MSBuildTasks.dll" />
+  <UsingTask TaskName="NCoverExplorer.MSBuildTasks.NCoverExplorer" AssemblyFile="$(CaminhoNCover)\Build Task Plugins\NCoverExplorer.MSBuildTasks.dll" />
+  
+  <Target Name="CoberturaTestes" DependsOnTargets="Tests">
+    <Message Text="#--------- Executando NCover ---------#" />
+
+    <MakeDir Directories="$(ResultsFolder)" Condition="!Exists('$(ResultsFolder)')" />
+
+    <NCover ToolPath="$(CaminhoNCover)"
+            CommandLineExe="$(ComandoNUnit)"
+            CommandLineArgs="$(TestFolder)\bin\$(Configuration)\UnitTests.dll"
+            WorkingDirectory="$(TestFolder)\bin\$(Configuration)"
+            CoverageFile="$(ResultsFolder)\$(ArquivoNCover)"
+            LogFile="$(ArquivoLogNCover)"
+            ExcludeAttributes="MSBuildDemo.Common.CoverageExcludeAttribute"
+            AssemblyList="@(CodeProjects->'%(FileName)')" />
+    
+    <!-- Resumo da Cobertura -->
+    <NCoverExplorer ToolPath="$(CaminhoNCoverExplorer)"
+                    ProjectName="$(ProjectName)"
+                    OutputDir="$(ResultsFolder)"
+                    CoverageFiles="$(ResultsFolder)\$(ArquivoNCover)"
+                    SatisfactoryCoverage="80"
+                    ReportType="3"
+                    XmlReportName="ResumoCobertura.xml"
+                    HtmlReportName="ResumoCobertura.html" />
+    <NCoverExplorer ToolPath="$(CaminhoNCoverExplorer)"
+                    ProjectName="$(ProjectName)"
+                    OutputDir="$(ResultsFolder)"
+                    CoverageFiles="$(ResultsFolder)\$(ArquivoNCover)"
+                    SatisfactoryCoverage="80"
+                    ReportType="4"
+                    XmlReportName="RelatorioCoberturaPorClasse.xml"
+                    HtmlReportName="RelatorioCoberturaPorClasse.html" />
+  </Target>
+</Project>
